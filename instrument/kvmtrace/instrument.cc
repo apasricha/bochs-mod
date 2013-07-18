@@ -28,6 +28,7 @@
 #include <fstream>
 #include "cycle.h"
 #include <stdio.h>
+#include <signal.h>
 
 #if BX_INSTRUMENTATION
 
@@ -35,6 +36,9 @@
 #if !defined KVMT_K
 #define KVMT_K 16
 #endif
+
+void sigusr1(int a);             //The signal responding function
+int isRecording = 0;             //marks whether the recording of references is on or off (1 or 0)
 
 FILE* myfile;                    //The file we write into
 bx_address nru[KVMT_K][3];       //FIFO Queue that holds page numbers of the addresses of memory accesses; Used to make a clock for most recently used pages. Column0 holds virtual page no of memory access, Column1 holds physical page no, Column2 holds boolean for 'just or recently used' 
@@ -44,6 +48,7 @@ int looker = 0;                  //Once the Queue is full, looker runs through t
 //Open the file to be written in when Bochs starts
 void bx_instr_init_env(void) {
   myfile = fopen("listings.txt", "w");
+  signal(SIGUSR1, sigusr1);                                 //register the signal handler
 }
 
 //Close the file after writing into it, when Bochs closes
@@ -142,12 +147,12 @@ char readWrite(unsigned rw, bx_address casenum) {
   else return 'T';
 }
 
-//writes the access address, read/write identifer, clock time of access and page contents of added (if any) or removed (if any) pages
-void writeRecord(unsigned rw1, bx_address lin, long long tsctime, bx_address casenum, BX_CPU_C* ptr, bx_address phy_add, bx_address removed_phy) {
+//writes the access page number, read/write identifer, clock time of access and page contents of added (if any) or removed (if any) pages
+void writeRecord(unsigned rw1, bx_address vpn, long long tsctime, bx_address casenum, BX_CPU_C* ptr, bx_address phy_add, bx_address removed_phy) {
   static void* page_contents = malloc(4096);                                 //pointer to data holder for page contents
   char rw = readWrite(rw1, casenum);                                         //gets read/write identifier
-  fwrite(&rw, sizeof(rw), 1, myfile);                                        //write read write identifer, linear access address, and clock time for each case
-  fwrite(&lin, sizeof(lin), 1, myfile);
+  fwrite(&rw, sizeof(rw), 1, myfile);                                        //write read write identifer, linear page address, and clock time for each case
+  fwrite(&vpn, sizeof(vpn), 1, myfile);
   fwrite(&tsctime, sizeof(tsctime), 1, myfile);
   //std::cout << "size of : " << sizeof(rw) << " " << sizeof(lin) << " " << sizeof(tsctime) << std::endl;
   if(casenum == 0) return;                                                  //if neither addition nor removal, exit method
@@ -159,6 +164,12 @@ void writeRecord(unsigned rw1, bx_address lin, long long tsctime, bx_address cas
   fwrite(page_contents, 4096, 1, myfile);                                   //and write to file
 }
 
+//This function is called each time we use a 'kill' signal, it toggles the on/off for recording
+void sigusr1(int a) {
+  if(isRecording == 1) isRecording = 0;
+  else isRecording = 1;
+}
+
 //Calls the rest of the methods which handle recording to file
 void bx_instr_lin_access(unsigned cpu, bx_address lin, bx_address phy, unsigned len, unsigned rw) {
   long long timer = (long)(bx_pc_system.time_ticks());                            //records clock time at access
@@ -168,7 +179,7 @@ void bx_instr_lin_access(unsigned cpu, bx_address lin, bx_address phy, unsigned 
   BX_CPU_C* cpu_ptr = BX_CPU(cpu);                                            //Pointer to current CPU used
   bx_address removed_physical_page;
   bx_address casenum = queueManager(lin, phy_page_add, &removed_physical_page); //gets case (of removal or addition of page to queue)
-  writeRecord(rw, lin, timer, casenum, cpu_ptr, phy_page_add, removed_physical_page);                //and writes to file
+  if(isRecording == 1) writeRecord(rw, lin >> 12, timer, casenum, cpu_ptr, phy_page_add, removed_physical_page);                //and writes to file
 }
 
 void bx_instr_phy_access(unsigned cpu, bx_address phy, unsigned len, unsigned rw) {}

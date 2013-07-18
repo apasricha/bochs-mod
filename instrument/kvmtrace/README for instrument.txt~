@@ -7,7 +7,7 @@ Author: Stanislav Shwartsman (Sourceforge)
 Modified by: Aneesh Pasricha '16 Amherst College and Scott Kaplan, Professor at Amherst College
 -----------
 
-Copyright: ??
+Copyright: 2013
 ---------
 
 The functions in instrument.cc are called whenever Bochs (version 2.6.2) is run. bx_instr_init_env(void) is called only when Bochs starts, and bx_instr_exit_env(void) is called only when Bochs is closed. void bx_instr_tlb_cntrl(unsigned cpu, unsigned what, bx_phy_address new_cr3) is called whenever a Translation Lookaside Buffer control instruction is executed by Bochs. void bx_instr_lin_access(unsigned cpu, bx_address lin, bx_address phy, unsigned len, unsigned rw) is called whenever Bochs executes an access to memory to perform a read/write operation. Using arguments given to these functions, the functions record virtual address of memory access, cpu timestamp at that instant, whether it was a read or a write operation, virtual address of the least recently used page in an approximate least-recently-used queue (called NRU), and contents of the accessed page and least recently used page.     
